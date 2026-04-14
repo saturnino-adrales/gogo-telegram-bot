@@ -213,7 +213,12 @@ console.log(`ACL: ${acl.list().join(", ")}`);
 
 async function main() {
   try {
-    await bot.launch();
+    // Delete webhook first to ensure clean polling start
+    await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+
+    // Don't await launch() — it never resolves in Telegraf v4 polling mode.
+    // Just call it to start the polling loop.
+    bot.launch({ dropPendingUpdates: true });
     console.log("Telegram bot is running.");
 
     try {
