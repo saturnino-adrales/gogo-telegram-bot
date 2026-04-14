@@ -11,13 +11,41 @@ Spawns a Telegram bot that bridges messages to a Claude Agent SDK session. The b
 
 Parse the user's arguments from the slash command input:
 
+- `ps` → **list all running bot processes** (skip all other steps, just run the ps command below)
+- `kill <PID>` → **kill a specific bot process** by PID
 - `--readonly` or `--ro` → permission level `readonly`
 - `--standard` or `--std` → permission level `standard`
 - `--full` → permission level `full`
 - `--acl 123,456` → additional Telegram user IDs for this session
 - No args → use config defaults
 
-## Steps
+## Subcommands
+
+### `/telegram ps` — List Running Bots
+
+Run this command and display the results in a table:
+
+```bash
+ps aux | grep "[n]ode.*index.js.*--bot-token" | awk '{print $2, $NF}' 
+```
+
+For a richer view, parse the full command args from each process:
+
+```bash
+ps aux | grep "[n]ode.*index.js.*--bot-token"
+```
+
+Display as a table with columns: **PID**, **Permission Level**, **Working Directory**, **Uptime**. If no processes found, say "No Telegram bots running."
+
+### `/telegram kill <PID>` — Kill a Bot
+
+```bash
+kill <PID>
+```
+
+Confirm the kill succeeded. If the user just says `/telegram kill` without a PID, run `/telegram ps` first and ask which one to kill.
+
+## Steps (for launching a new bot)
 
 ### 1. Check Configs & Ask Which Bot to Use
 
