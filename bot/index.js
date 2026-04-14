@@ -2,8 +2,9 @@ import { Telegraf } from "telegraf";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { readFileSync, unlinkSync, existsSync } from "fs";
 import { createAcl } from "./acl.js";
-import { getToolsForLevel } from "./permissions.js";
+import { getToolsForLevel, PERMISSION_LEVELS } from "./permissions.js";
 import { chunkMessage } from "./chunker.js";
+import { mdToTelegramHtml } from "./formatter.js";
 
 // --- Parse CLI args ---
 function parseArgs() {
@@ -33,9 +34,10 @@ if (config.contextFile && existsSync(config.contextFile)) {
   conversationContext = readFileSync(config.contextFile, "utf8");
 }
 
-// --- ACL & Permissions ---
+// --- ACL & Permissions (mutable for live changes) ---
 const acl = createAcl({ ownerId: config.ownerId, allowedIds: config.acl });
-const allowedTools = getToolsForLevel(config.permissionLevel);
+let currentPermLevel = config.permissionLevel;
+let allowedTools = getToolsForLevel(currentPermLevel);
 
 // --- SDK session state ---
 let sessionId = null;
@@ -109,8 +111,8 @@ bot.command("status", async (ctx) => {
   const mins = Math.floor(uptime / 60);
   const secs = uptime % 60;
   await ctx.reply(
-    `*Status*\nPermissions: \`${config.permissionLevel}\`\nWorking dir: \`${config.cwd}\`\nUptime: ${mins}m ${secs}s\nSession: \`${sessionId || "not started"}\``,
-    { parse_mode: "Markdown" }
+    `<b>Status</b>\nPermissions: <code>${currentPermLevel}</code>\nWorking dir: <code>${config.cwd}</code>\nUptime: ${mins}m ${secs}s\nSession: <code>${sessionId || "not started"}</code>`,
+    { parse_mode: "HTML" }
   );
 });
 
@@ -118,8 +120,38 @@ bot.command("status", async (ctx) => {
 bot.command("perms", async (ctx) => {
   if (!acl.isAllowed(ctx.from.id)) return;
   await ctx.reply(
-    `*Permission level:* \`${config.permissionLevel}\`\n*Allowed tools:*\n${allowedTools.map((t) => `- ${t}`).join("\n")}`,
-    { parse_mode: "Markdown" }
+    `<b>Permission level:</b> <code>${currentPermLevel}</code>\n<b>Allowed tools:</b>\n${allowedTools.map((t) => `• ${t}`).join("\n")}`,
+    { parse_mode: "HTML" }
+  );
+});
+
+// /permlevel — owner only, change permissions live
+bot.command("permlevel", async (ctx) => {
+  if (!acl.isOwner(ctx.from.id)) return;
+
+  const newLevel = ctx.message.text.replace(/^\/permlevel\s*/, "").trim();
+
+  if (!newLevel) {
+    await ctx.reply(
+      `<b>Current:</b> <code>${currentPermLevel}</code>\n<b>Usage:</b> <code>/permlevel readonly|standard|full</code>`,
+      { parse_mode: "HTML" }
+    );
+    return;
+  }
+
+  if (!PERMISSION_LEVELS.includes(newLevel)) {
+    await ctx.reply(
+      `Unknown level: <code>${newLevel}</code>\nMust be: <code>${PERMISSION_LEVELS.join(" | ")}</code>`,
+      { parse_mode: "HTML" }
+    );
+    return;
+  }
+
+  currentPermLevel = newLevel;
+  allowedTools = getToolsForLevel(newLevel);
+  await ctx.reply(
+    `Permissions changed to <b>${newLevel}</b>\n${allowedTools.map((t) => `• ${t}`).join("\n")}`,
+    { parse_mode: "HTML" }
   );
 });
 
@@ -173,11 +205,13 @@ bot.on("message", async (ctx) => {
       return;
     }
 
-    const chunks = chunkMessage(response);
+    const html = mdToTelegramHtml(response);
+    const chunks = chunkMessage(html);
     for (const chunk of chunks) {
       try {
-        await ctx.reply(chunk, { parse_mode: "Markdown" });
+        await ctx.reply(chunk, { parse_mode: "HTML" });
       } catch {
+        // HTML parse failed — send as plain text
         await ctx.reply(chunk);
       }
     }
