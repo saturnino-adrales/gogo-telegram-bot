@@ -250,24 +250,26 @@ bot.on("message", async (ctx) => {
             const sent = await ctx.reply(toolText, { parse_mode: "HTML" });
             toolMsgId = sent.message_id;
           }
-        } catch {}
+        } catch (e) {
+          console.error(`[TOOL_SEND_ERR] ${e.message}`);
+        }
       } else if (event.type === "text") {
         console.log(`[TEXT] Intermediate: ${event.text.slice(0, 80)}`);
         intermediateTexts.push(event.text);
       }
     });
 
-    clearInterval(typingInterval);
     console.log(`[SDK] Done. Result length: ${response?.length || 0}, intermediates: ${intermediateTexts.length}`);
 
     // Send intermediate texts that are NOT the final result (e.g. "Let me check...")
-    // The last intermediate is often the final result — skip it to avoid duplication
     for (const text of intermediateTexts) {
       if (text !== response && text.length > 0) {
         const html = mdToTelegramHtml(text);
         try {
           await ctx.reply(html, { parse_mode: "HTML" });
-        } catch {
+          console.log(`[SENT] Intermediate text (${text.length} chars)`);
+        } catch (e) {
+          console.error(`[HTML_ERR] ${e.message}, falling back to plain text`);
           await ctx.reply(text);
         }
       }
@@ -280,13 +282,18 @@ bot.on("message", async (ctx) => {
       for (const chunk of chunks) {
         try {
           await ctx.reply(chunk, { parse_mode: "HTML" });
-        } catch {
+          console.log(`[SENT] Final result chunk (${chunk.length} chars)`);
+        } catch (e) {
+          console.error(`[HTML_ERR] ${e.message}, falling back to plain text`);
           await ctx.reply(chunk);
         }
       }
     } else if (intermediateTexts.length === 0) {
       await ctx.reply("(No response from Claude)");
     }
+
+    // Stop typing only after all messages are sent
+    clearInterval(typingInterval);
   } catch (err) {
     clearInterval(typingInterval);
     console.error(`[ERR] ${err.message}`);
