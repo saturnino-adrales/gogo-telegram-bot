@@ -56,7 +56,8 @@ function buildSystemPrompt() {
 }
 
 // --- Send a message to the SDK session and return the response ---
-async function askSdk(userMessage) {
+// onEvent callback receives intermediate events: { type, text?, tool?, input? }
+async function askSdk(userMessage, onEvent) {
   const isFirstMessage = sessionId === null;
 
   const prompt = isFirstMessage
@@ -82,6 +83,18 @@ async function askSdk(userMessage) {
     ) {
       sessionId = message.session_id;
     }
+
+    // Emit intermediate events
+    if (message.type === "assistant" && message.message?.content && onEvent) {
+      for (const block of message.message.content) {
+        if (block.type === "text" && block.text) {
+          onEvent({ type: "text", text: block.text });
+        } else if (block.type === "tool_use") {
+          onEvent({ type: "tool", tool: block.name, input: block.input });
+        }
+      }
+    }
+
     if (message.type === "result") {
       result = message.result || "";
       if (message.session_id) {
@@ -185,6 +198,15 @@ bot.command("context", async (ctx) => {
   await ctx.reply(summary);
 });
 
+// --- Format tool name for display ---
+function formatToolArg(tool, input) {
+  if (!input) return tool;
+  if (input.file_path) return `${tool} (${input.file_path.split("/").pop()})`;
+  if (input.pattern) return `${tool} ("${input.pattern}")`;
+  if (input.command) return `${tool} (${input.command.slice(0, 40)}${input.command.length > 40 ? "..." : ""})`;
+  return tool;
+}
+
 // Regular messages — forward to SDK
 bot.on("message", async (ctx) => {
   if (!ctx.message.text) return;
@@ -197,23 +219,68 @@ bot.on("message", async (ctx) => {
   await ctx.sendChatAction("typing");
 
   try {
-    const response = await askSdk(ctx.message.text);
+    // Collect tools used and intermediate text
+    const toolsUsed = [];
+    let toolMsgId = null;
+    const intermediateTexts = [];
+
+    const response = await askSdk(ctx.message.text, async (event) => {
+      if (event.type === "tool") {
+        toolsUsed.push(formatToolArg(event.tool, event.input));
+        const toolList = toolsUsed.map((t) => `  ${t}`).join("\n");
+        const toolText = `<b>Tools used:</b>\n<pre>${toolList}</pre>`;
+        try {
+          if (toolMsgId) {
+            // Edit existing tool message
+            await ctx.telegram.editMessageText(
+              ctx.chat.id,
+              toolMsgId,
+              null,
+              toolText,
+              { parse_mode: "HTML" }
+            );
+          } else {
+            // Send first tool message
+            const sent = await ctx.reply(toolText, { parse_mode: "HTML" });
+            toolMsgId = sent.message_id;
+          }
+        } catch {}
+      } else if (event.type === "text") {
+        // Intermediate text like "Let me check..." — only send if no final result yet
+        intermediateTexts.push(event.text);
+      }
+    });
+
     clearInterval(typingInterval);
 
-    if (!response) {
-      await ctx.reply("(No response from Claude)");
-      return;
+    // Send intermediate texts that appeared before tools (like "Let me check...")
+    // but skip the last one if it matches the final result (to avoid duplication)
+    for (const text of intermediateTexts) {
+      if (text !== response && text.length > 0) {
+        const html = mdToTelegramHtml(text);
+        try {
+          await ctx.reply(html, { parse_mode: "HTML" });
+        } catch {
+          await ctx.reply(text);
+        }
+      }
     }
 
-    const html = mdToTelegramHtml(response);
-    const chunks = chunkMessage(html);
-    for (const chunk of chunks) {
-      try {
-        await ctx.reply(chunk, { parse_mode: "HTML" });
-      } catch {
-        // HTML parse failed — send as plain text
-        await ctx.reply(chunk);
+    // Send final result if not already sent as intermediate text
+    if (response && !intermediateTexts.includes(response)) {
+      const html = mdToTelegramHtml(response);
+      const chunks = chunkMessage(html);
+      for (const chunk of chunks) {
+        try {
+          await ctx.reply(chunk, { parse_mode: "HTML" });
+        } catch {
+          await ctx.reply(chunk);
+        }
       }
+    }
+
+    if (!response && intermediateTexts.length === 0) {
+      await ctx.reply("(No response from Claude)");
     }
   } catch (err) {
     clearInterval(typingInterval);
