@@ -210,7 +210,11 @@ function formatToolArg(tool, input) {
 // Regular messages — forward to SDK
 bot.on("message", async (ctx) => {
   if (!ctx.message.text) return;
-  if (!acl.isAllowed(ctx.from.id)) return;
+  console.log(`[MSG] From ${ctx.from.id}: ${ctx.message.text.slice(0, 100)}`);
+  if (!acl.isAllowed(ctx.from.id)) {
+    console.log(`[ACL] Rejected user ${ctx.from.id}`);
+    return;
+  }
 
   // Keep typing indicator alive every 4s until response is ready
   const typingInterval = setInterval(() => {
@@ -224,8 +228,10 @@ bot.on("message", async (ctx) => {
     let toolMsgId = null;
     const intermediateTexts = [];
 
+    console.log("[SDK] Sending to Claude...");
     const response = await askSdk(ctx.message.text, async (event) => {
       if (event.type === "tool") {
+        console.log(`[TOOL] ${event.tool}`);
         toolsUsed.push(formatToolArg(event.tool, event.input));
         const toolList = toolsUsed.map((t) => `  ${t}`).join("\n");
         const toolText = `<b>Tools used:</b>\n<pre>${toolList}</pre>`;
@@ -246,15 +252,16 @@ bot.on("message", async (ctx) => {
           }
         } catch {}
       } else if (event.type === "text") {
-        // Intermediate text like "Let me check..." — only send if no final result yet
+        console.log(`[TEXT] Intermediate: ${event.text.slice(0, 80)}`);
         intermediateTexts.push(event.text);
       }
     });
 
     clearInterval(typingInterval);
+    console.log(`[SDK] Done. Result length: ${response?.length || 0}, intermediates: ${intermediateTexts.length}`);
 
-    // Send intermediate texts that appeared before tools (like "Let me check...")
-    // but skip the last one if it matches the final result (to avoid duplication)
+    // Send intermediate texts that are NOT the final result (e.g. "Let me check...")
+    // The last intermediate is often the final result — skip it to avoid duplication
     for (const text of intermediateTexts) {
       if (text !== response && text.length > 0) {
         const html = mdToTelegramHtml(text);
@@ -266,8 +273,8 @@ bot.on("message", async (ctx) => {
       }
     }
 
-    // Send final result if not already sent as intermediate text
-    if (response && !intermediateTexts.includes(response)) {
+    // Always send the final result
+    if (response) {
       const html = mdToTelegramHtml(response);
       const chunks = chunkMessage(html);
       for (const chunk of chunks) {
@@ -277,13 +284,12 @@ bot.on("message", async (ctx) => {
           await ctx.reply(chunk);
         }
       }
-    }
-
-    if (!response && intermediateTexts.length === 0) {
+    } else if (intermediateTexts.length === 0) {
       await ctx.reply("(No response from Claude)");
     }
   } catch (err) {
     clearInterval(typingInterval);
+    console.error(`[ERR] ${err.message}`);
     await ctx.reply(`Error: ${err.message}`);
   }
 });
