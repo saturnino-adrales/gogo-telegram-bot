@@ -158,10 +158,15 @@ bot.on("message", async (ctx) => {
   if (!ctx.message.text) return;
   if (!acl.isAllowed(ctx.from.id)) return;
 
+  // Keep typing indicator alive every 4s until response is ready
+  const typingInterval = setInterval(() => {
+    ctx.sendChatAction("typing").catch(() => {});
+  }, 4000);
   await ctx.sendChatAction("typing");
 
   try {
     const response = await askSdk(ctx.message.text);
+    clearInterval(typingInterval);
 
     if (!response) {
       await ctx.reply("(No response from Claude)");
@@ -177,6 +182,7 @@ bot.on("message", async (ctx) => {
       }
     }
   } catch (err) {
+    clearInterval(typingInterval);
     await ctx.reply(`Error: ${err.message}`);
   }
 });
