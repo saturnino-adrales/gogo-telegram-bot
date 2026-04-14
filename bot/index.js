@@ -201,21 +201,35 @@ process.once("SIGTERM", () => {
 });
 
 // --- Launch ---
+process.on("unhandledRejection", (err) => {
+  console.error("Unhandled rejection:", err);
+  process.exit(1);
+});
+
 console.log("Telegram bot starting...");
 console.log(`Permission level: ${config.permissionLevel}`);
 console.log(`Working directory: ${config.cwd}`);
 console.log(`ACL: ${acl.list().join(", ")}`);
 
-bot.launch().then(async () => {
-  console.log("Telegram bot is running.");
-
+async function main() {
   try {
-    await bot.telegram.sendMessage(
-      config.ownerId,
-      `*Bot online*\nPermissions: \`${config.permissionLevel}\`\nDirectory: \`${config.cwd}\`\nSend /stop to shut down.`,
-      { parse_mode: "Markdown" }
-    );
+    await bot.launch();
+    console.log("Telegram bot is running.");
+
+    try {
+      await bot.telegram.sendMessage(
+        config.ownerId,
+        `*Bot online*\nPermissions: \`${config.permissionLevel}\`\nDirectory: \`${config.cwd}\`\nSend /stop to shut down.`,
+        { parse_mode: "Markdown" }
+      );
+      console.log("Startup message sent to owner.");
+    } catch (err) {
+      console.error("Could not send startup message to owner:", err.message);
+    }
   } catch (err) {
-    console.error("Could not send startup message to owner:", err.message);
+    console.error("Bot launch failed:", err.message);
+    process.exit(1);
   }
-});
+}
+
+main();

@@ -19,30 +19,49 @@ Parse the user's arguments from the slash command input:
 
 ## Steps
 
-### 1. Load Config
+### 1. Check Configs & Ask Which Bot to Use
 
-Read the layered config:
+Check for both config files:
 
 ```bash
-# Global config (required)
+# Global config
 cat ~/.claude/telegram-bot.yml
 
-# Project config (optional)
+# Project config
 cat ./telegram-bot.yml
 ```
 
-If `~/.claude/telegram-bot.yml` does not exist, tell the user:
+**Decision flow:**
 
-> Create `~/.claude/telegram-bot.yml` with:
-> ```yaml
-> telegram:
->   bot_token: "YOUR_BOT_TOKEN"
->   owner_id: YOUR_TELEGRAM_USER_ID
-> defaults:
->   permission_level: readonly
->   acl: []
-> ```
-> Get a bot token from @BotFather on Telegram.
+- **Neither exists**: Tell the user they need to set up a bot first. Walk them through BotFather and ask if they want to save it as global or project-level.
+- **Global only, no project config**: Ask the user:
+  > Found global bot: `@BOT_USERNAME_HERE`
+  > 
+  > **A)** Use this bot for the current session
+  > **B)** Register a new bot specifically for this project folder
+  >
+  > Which one?
+  
+  - If **A**: Use the global config.
+  - If **B**: Walk them through creating a new bot with @BotFather, then save the token + owner_id to `./telegram-bot.yml` in the current project.
+
+- **Project config exists**: Use it directly (project config takes priority). Inform the user:
+  > Using project bot: `@PROJECT_BOT_USERNAME`
+
+- **Both exist**: Use project config. Mention the global bot is available if they want to switch.
+
+**When creating a new project bot**, write `./telegram-bot.yml`:
+
+```yaml
+telegram:
+  bot_token: "TOKEN_FROM_BOTFATHER"
+  owner_id: OWNER_ID_FROM_GLOBAL_OR_USER
+defaults:
+  permission_level: readonly
+  acl: []
+```
+
+The `owner_id` can be inherited from the global config if it exists, so the user doesn't have to provide it again.
 
 ### 2. Auto-Install Dependencies
 
@@ -94,6 +113,7 @@ Run this as a **background process** using the Bash tool with `run_in_background
 Tell the user:
 
 > Telegram bot is running (PID: [pid]).
+> - Bot: @BOT_USERNAME
 > - Permission level: [level]
 > - Working directory: [cwd]
 > - ACL: [user IDs]
