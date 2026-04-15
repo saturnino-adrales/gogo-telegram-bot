@@ -13,6 +13,8 @@ Parse the user's arguments from the slash command input:
 
 - `ps` → **list all running bot processes** (skip all other steps, just run the ps command below)
 - `kill <PID>` → **kill a specific bot process** by PID
+- `stop` → **kill all running bot processes**
+- `restart` → **kill all running bots, then relaunch** with the same permission level as the killed process (parse it from the ps output). If can't determine, use config default.
 - `--readonly` or `--ro` → permission level `readonly`
 - `--standard` or `--std` → permission level `standard`
 - `--full` → permission level `full`
@@ -44,6 +46,20 @@ kill <PID>
 ```
 
 Confirm the kill succeeded. If the user just says `/telegram kill` without a PID, run `/telegram ps` first and ask which one to kill.
+
+### `/telegram stop` — Stop All Bots
+
+```bash
+pkill -f "node index.js.*bot-token"
+```
+
+### `/telegram restart` — Restart Bot
+
+1. Read the running bot's permission level from `ps` output (parse `--permission-level` from the command args)
+2. Kill all running bots: `pkill -f "node index.js.*bot-token"`
+3. Relaunch with the same permission level following the normal launch steps below
+
+If no bot is running, just launch a new one.
 
 ## Steps (for launching a new bot)
 
