@@ -1,11 +1,11 @@
-# fid-telegram-bot
+# gogo-telegram-bot
 
 Claude Code plugin that spawns an ephemeral Telegram bot backed by a Claude Agent SDK session. The bot inherits your full conversation context and can perform the same actions as Claude Code — from your phone.
 
 ## Install
 
 ```bash
-claude plugins add fid-telegram-bot
+claude plugins add gogo-telegram-bot
 ```
 
 ## Setup
@@ -26,14 +26,14 @@ defaults:
 ## Usage
 
 ```
-/fid-telegram-bot:telegram              # Launch with default permissions
-/fid-telegram-bot:telegram --full       # Full access (read/write/bash/agents)
-/fid-telegram-bot:telegram --standard   # Read + edit + bash
-/fid-telegram-bot:telegram --readonly   # Read only (default)
-/fid-telegram-bot:telegram ps           # List running bots
-/fid-telegram-bot:telegram stop         # Stop all bots
-/fid-telegram-bot:telegram restart      # Restart with same permissions
-/fid-telegram-bot:telegram kill <PID>   # Kill specific bot
+/gogo-telegram-bot:telegram              # Launch with default permissions
+/gogo-telegram-bot:telegram --full       # Full access (read/write/bash/agents)
+/gogo-telegram-bot:telegram --standard   # Read + edit + bash
+/gogo-telegram-bot:telegram --readonly   # Read only (default)
+/gogo-telegram-bot:telegram ps           # List running bots
+/gogo-telegram-bot:telegram stop         # Stop all bots
+/gogo-telegram-bot:telegram restart      # Restart with same permissions
+/gogo-telegram-bot:telegram kill <PID>   # Kill specific bot
 ```
 
 ## Telegram Commands

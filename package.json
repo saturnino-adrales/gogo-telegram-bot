@@ -1,5 +1,5 @@
 {
-  "name": "fid-telegram-bot",
+  "name": "gogo-telegram-bot",
   "version": "1.0.0",
   "description": "Claude Code plugin — spawn an ephemeral Telegram bot with full conversation context, configurable permissions, and real-time tool use streaming",
   "main": ".",
@@ -17,10 +17,10 @@
     "bot",
     "agent-sdk"
   ],
-  "author": "F.I.D Inc. <dev@f-i-d.co.jp>",
+  "author": "GoGo IT Lab <dev@gogo-it-lab.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/fid-inc/fid-telegram-bot.git"
+    "url": "https://github.com/gogo-it-lab/gogo-telegram-bot.git"
   }
 }
