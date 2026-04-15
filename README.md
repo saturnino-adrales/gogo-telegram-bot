@@ -7,7 +7,7 @@ Claude Code plugin that spawns an ephemeral Telegram bot backed by a Claude Agen
 One command:
 
 ```bash
-npx gogo-telegram-bot-install
+npx gogo-telegram-bot
 ```
 
 Or manually:
@@ -35,14 +35,14 @@ defaults:
 ## Usage
 
 ```
-/gogo-telegram-bot:telegram              # Launch with default permissions
-/gogo-telegram-bot:telegram --full       # Full access (read/write/bash/agents)
-/gogo-telegram-bot:telegram --standard   # Read + edit + bash
-/gogo-telegram-bot:telegram --readonly   # Read only (default)
-/gogo-telegram-bot:telegram ps           # List running bots
-/gogo-telegram-bot:telegram stop         # Stop all bots
-/gogo-telegram-bot:telegram restart      # Restart with same permissions
-/gogo-telegram-bot:telegram kill <PID>   # Kill specific bot
+/telegram-bot                # Launch with default permissions
+/telegram-bot --full         # Full access (read/write/bash/agents)
+/telegram-bot --standard     # Read + edit + bash
+/telegram-bot --readonly     # Read only (default)
+/telegram-bot ps             # List running bots
+/telegram-bot stop           # Stop all bots
+/telegram-bot restart        # Restart with same permissions
+/telegram-bot kill <PID>     # Kill specific bot
 ```
 
 ## Telegram Commands
