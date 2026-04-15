@@ -198,13 +198,19 @@ bot.command("context", async (ctx) => {
   await ctx.reply(summary);
 });
 
+// --- Escape HTML entities for Telegram ---
+function escHtml(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 // --- Format tool name for display ---
 function formatToolArg(tool, input) {
-  if (!input) return tool;
-  if (input.file_path) return `${tool} (${input.file_path.split("/").pop()})`;
-  if (input.pattern) return `${tool} ("${input.pattern}")`;
-  if (input.command) return `${tool} (${input.command.slice(0, 40)}${input.command.length > 40 ? "..." : ""})`;
-  return tool;
+  if (!input) return escHtml(tool);
+  if (input.file_path) return `${escHtml(tool)} (${escHtml(input.file_path.split("/").pop())})`;
+  if (input.pattern) return `${escHtml(tool)} ("${escHtml(input.pattern)}")`;
+  if (input.command) return `${escHtml(tool)} (${escHtml(input.command.slice(0, 40))}${input.command.length > 40 ? "..." : ""})`;
+  if (input.skill) return `${escHtml(tool)} (${escHtml(input.skill)})`;
+  return escHtml(tool);
 }
 
 // Regular messages — forward to SDK
