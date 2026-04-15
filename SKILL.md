@@ -50,13 +50,15 @@ Confirm the kill succeeded. If the user just says `/telegram kill` without a PID
 ### `/telegram stop` — Stop All Bots
 
 ```bash
-pkill -f "node index.js.*bot-token"
+pkill -9 -f "bot/index.js.*--bot-token"
 ```
+
+Verify with `ps aux | grep "[b]ot/index.js.*--bot-token"` — should return nothing.
 
 ### `/telegram restart` — Restart Bot
 
 1. Read the running bot's permission level from `ps` output (parse `--permission-level` from the command args)
-2. Kill all running bots: `pkill -f "node index.js.*bot-token"`
+2. Kill all running bots: `pkill -9 -f "bot/index.js.*--bot-token"`
 3. Relaunch with the same permission level following the normal launch steps below
 
 If no bot is running, just launch a new one.
