@@ -24,6 +24,13 @@ for (const dir of dirs) {
   }
 }
 
+// Copy SKILL.md to root level (Claude Code looks for it there)
+const skillMd = join(srcDir, "skills", "telegram", "SKILL.md");
+if (existsSync(skillMd)) {
+  cpSync(skillMd, join(skillDir, "SKILL.md"));
+  console.log("  Copied SKILL.md to root");
+}
+
 console.log("\n  Installing bot dependencies...");
 execFileSync("npm", ["install", "--production"], {
   cwd: join(skillDir, "bot"),
