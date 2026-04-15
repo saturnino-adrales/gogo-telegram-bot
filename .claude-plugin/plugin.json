@@ -1,0 +1,12 @@
+{
+  "name": "fid-telegram-bot",
+  "description": "Spawn an ephemeral Telegram bot from Claude Code with full conversation context, configurable permissions, and real-time tool use streaming",
+  "version": "1.0.0",
+  "author": {
+    "name": "F.I.D Inc.",
+    "email": "dev@f-i-d.co.jp"
+  },
+  "repository": "https://github.com/fid-inc/fid-telegram-bot",
+  "license": "MIT",
+  "keywords": ["telegram", "bot", "claude-code", "agent-sdk", "remote"]
+}
