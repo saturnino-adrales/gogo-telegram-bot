@@ -4,8 +4,17 @@ Claude Code plugin that spawns an ephemeral Telegram bot backed by a Claude Agen
 
 ## Install
 
+One command:
+
 ```bash
-claude plugins add gogo-telegram-bot
+npx gogo-telegram-bot-install
+```
+
+Or manually:
+
+```bash
+git clone https://github.com/saturnino-adrales/gogo-telegram-bot.git ~/.claude/skills/telegram-bot
+cd ~/.claude/skills/telegram-bot/bot && npm install
 ```
 
 ## Setup

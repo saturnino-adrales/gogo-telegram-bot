@@ -1,0 +1,5 @@
+node_modules/
+bot/node_modules/
+bot/__tests__/
+bot/package-lock.json
+.git/
