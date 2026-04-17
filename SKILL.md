@@ -23,43 +23,63 @@ Parse the user's arguments from the slash command input:
 
 ## Subcommands
 
-### `/telegram ps` — List Running Bots
+> **Note**: The bot writes a state file at `/tmp/gogo-telegram-bot.state.json`
+> when it starts and deletes it on clean exit. All `ps`/`kill`/`stop`/`restart`
+> subcommands read from this file — **no `ps aux` scanning** (which can hang on
+> some macOS setups). If the process was force-killed, the file may be stale;
+> the commands below probe with `kill -0 <PID>` and clean up stale files.
 
-Run this command and display the results in a table:
-
-```bash
-ps aux | grep "[n]ode.*index.js.*--bot-token" | awk '{print $2, $NF}' 
-```
-
-For a richer view, parse the full command args from each process:
+### `/telegram ps` — Show Running Bot
 
 ```bash
-ps aux | grep "[n]ode.*index.js.*--bot-token"
+STATE=/tmp/gogo-telegram-bot.state.json
+if [ -f "$STATE" ]; then
+  PID=$(node -p "require('$STATE').pid" 2>/dev/null)
+  if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+    cat "$STATE"
+  else
+    echo "Stale state file (PID $PID not running). Cleaning up."
+    rm -f "$STATE"
+    echo "No Telegram bots running."
+  fi
+else
+  echo "No Telegram bots running."
+fi
 ```
 
-Display as a table with columns: **PID**, **Permission Level**, **Working Directory**, **Uptime**. If no processes found, say "No Telegram bots running."
+Display the JSON state as a readable table with: **PID**, **Permission Level**, **Working Directory**, **Started At**, **Owner ID**, **ACL**.
 
 ### `/telegram kill <PID>` — Kill a Bot
 
 ```bash
 kill <PID>
+rm -f /tmp/gogo-telegram-bot.state.json
 ```
 
 Confirm the kill succeeded. If the user just says `/telegram kill` without a PID, run `/telegram ps` first and ask which one to kill.
 
-### `/telegram stop` — Stop All Bots
+### `/telegram stop` — Stop the Running Bot
 
 ```bash
-pkill -9 -f "bot/index.js.*--bot-token"
+STATE=/tmp/gogo-telegram-bot.state.json
+if [ -f "$STATE" ]; then
+  PID=$(node -p "require('$STATE').pid" 2>/dev/null)
+  if [ -n "$PID" ]; then kill -9 "$PID" 2>/dev/null; fi
+  rm -f "$STATE"
+  echo "Stopped bot (PID $PID)."
+else
+  echo "No Telegram bots running."
+fi
 ```
-
-Verify with `ps aux | grep "[b]ot/index.js.*--bot-token"` — should return nothing.
 
 ### `/telegram restart` — Restart Bot
 
-1. Read the running bot's permission level from `ps` output (parse `--permission-level` from the command args)
-2. Kill all running bots: `pkill -9 -f "bot/index.js.*--bot-token"`
-3. Relaunch with the same permission level following the normal launch steps below
+1. Read the running bot's permission level from the state file:
+   ```bash
+   LEVEL=$(node -p "require('/tmp/gogo-telegram-bot.state.json').permissionLevel" 2>/dev/null)
+   ```
+2. Run `/telegram stop` (above) to kill the current bot and remove the state file.
+3. Relaunch with `$LEVEL` (or config default if missing) following the normal launch steps below.
 
 If no bot is running, just launch a new one.
 

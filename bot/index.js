@@ -44,6 +44,34 @@ let allowedTools = getToolsForLevel(currentPermLevel);
 let sessionId = null;
 const startTime = Date.now();
 
+// --- PID / state file (cheap alternative to `ps aux` for skill discovery) ---
+const STATE_FILE = "/tmp/gogo-telegram-bot.state.json";
+
+function writeStateFile() {
+  const state = {
+    pid: process.pid,
+    permissionLevel: currentPermLevel,
+    cwd: config.cwd,
+    ownerId: config.ownerId,
+    acl: acl.list(),
+    startedAt: new Date(startTime).toISOString(),
+  };
+  try {
+    writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    console.log(`State file written: ${STATE_FILE}`);
+  } catch (e) {
+    console.error(`Failed to write state file: ${e.message}`);
+  }
+}
+
+function removeStateFile() {
+  if (existsSync(STATE_FILE)) {
+    try {
+      unlinkSync(STATE_FILE);
+    } catch {}
+  }
+}
+
 // --- Build the system prompt with conversation context ---
 function buildSystemPrompt() {
   let prompt =
@@ -163,6 +191,7 @@ bot.command("permlevel", async (ctx) => {
 
   currentPermLevel = newLevel;
   allowedTools = getToolsForLevel(newLevel);
+  writeStateFile();
   await ctx.reply(
     `Permissions changed to <b>${newLevel}</b>\n${allowedTools.map((t) => `• ${t}`).join("\n")}`,
     { parse_mode: "HTML" }
@@ -178,9 +207,11 @@ bot.command("acl", async (ctx) => {
 
   if (action === "add" && userId) {
     acl.add(Number(userId));
+    writeStateFile();
     await ctx.reply(`Added user ${userId} to ACL.`);
   } else if (action === "remove" && userId) {
     acl.remove(Number(userId));
+    writeStateFile();
     await ctx.reply(`Removed user ${userId} from ACL.`);
   } else {
     const users = acl.list().join(", ");
@@ -409,6 +440,7 @@ function cleanup() {
       unlinkSync(config.contextFile);
     } catch {}
   }
+  removeStateFile();
   bot.stop();
 }
 
@@ -440,6 +472,7 @@ async function main() {
     // Don't await launch() — it never resolves in Telegraf v4 polling mode.
     // Just call it to start the polling loop.
     bot.launch({ dropPendingUpdates: true });
+    writeStateFile();
     console.log("Telegram bot is running.");
 
     try {
