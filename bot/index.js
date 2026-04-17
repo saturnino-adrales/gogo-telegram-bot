@@ -1,6 +1,7 @@
 import { Telegraf } from "telegraf";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { readFileSync, unlinkSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync } from "fs";
+import path from "path";
 import { createAcl } from "./acl.js";
 import { getToolsForLevel, PERMISSION_LEVELS } from "./permissions.js";
 import { chunkMessage } from "./chunker.js";
@@ -198,6 +199,74 @@ bot.command("context", async (ctx) => {
   await ctx.reply(summary);
 });
 
+// --- Extract and download attachments from a Telegram message ---
+// Returns an array of absolute local file paths.
+async function downloadAttachments(ctx) {
+  const msg = ctx.message;
+  const specs = [];
+
+  if (msg.photo) {
+    const largest = msg.photo[msg.photo.length - 1];
+    specs.push({ fileId: largest.file_id, name: `photo_${largest.file_unique_id}.jpg` });
+  }
+  if (msg.document) {
+    specs.push({
+      fileId: msg.document.file_id,
+      name: msg.document.file_name || `doc_${msg.document.file_unique_id}`,
+    });
+  }
+  if (msg.video) {
+    specs.push({
+      fileId: msg.video.file_id,
+      name: msg.video.file_name || `video_${msg.video.file_unique_id}.mp4`,
+    });
+  }
+  if (msg.audio) {
+    specs.push({
+      fileId: msg.audio.file_id,
+      name: msg.audio.file_name || `audio_${msg.audio.file_unique_id}.mp3`,
+    });
+  }
+  if (msg.voice) {
+    specs.push({ fileId: msg.voice.file_id, name: `voice_${msg.voice.file_unique_id}.ogg` });
+  }
+  if (msg.video_note) {
+    specs.push({ fileId: msg.video_note.file_id, name: `videonote_${msg.video_note.file_unique_id}.mp4` });
+  }
+  if (msg.animation) {
+    specs.push({
+      fileId: msg.animation.file_id,
+      name: msg.animation.file_name || `anim_${msg.animation.file_unique_id}.mp4`,
+    });
+  }
+  if (msg.sticker) {
+    specs.push({ fileId: msg.sticker.file_id, name: `sticker_${msg.sticker.file_unique_id}.webp` });
+  }
+
+  if (specs.length === 0) return [];
+
+  const uploadsDir = path.join(config.cwd, ".telegram-uploads");
+  if (!existsSync(uploadsDir)) mkdirSync(uploadsDir, { recursive: true });
+
+  const paths = [];
+  for (const spec of specs) {
+    try {
+      const link = await ctx.telegram.getFileLink(spec.fileId);
+      const res = await fetch(link.href);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buf = Buffer.from(await res.arrayBuffer());
+      const safeName = spec.name.replace(/[^\w\-.]/g, "_");
+      const savePath = path.join(uploadsDir, `${Date.now()}_${safeName}`);
+      writeFileSync(savePath, buf);
+      paths.push(savePath);
+      console.log(`[DL] ${savePath} (${buf.length} bytes)`);
+    } catch (e) {
+      console.error(`[DL_ERR] ${spec.name}: ${e.message}`);
+    }
+  }
+  return paths;
+}
+
 // --- Escape HTML entities for Telegram ---
 function escHtml(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -215,8 +284,16 @@ function formatToolArg(tool, input) {
 
 // Regular messages — forward to SDK
 bot.on("message", async (ctx) => {
-  if (!ctx.message.text) return;
-  console.log(`[MSG] From ${ctx.from.id}: ${ctx.message.text.slice(0, 100)}`);
+  const msg = ctx.message;
+  const textPart = msg.text || msg.caption || "";
+  const hasAttachment = !!(
+    msg.photo || msg.document || msg.video || msg.audio ||
+    msg.voice || msg.video_note || msg.animation || msg.sticker
+  );
+
+  if (!textPart && !hasAttachment) return;
+
+  console.log(`[MSG] From ${ctx.from.id}: text="${textPart.slice(0, 80)}" attachment=${hasAttachment}`);
   if (!acl.isAllowed(ctx.from.id)) {
     console.log(`[ACL] Rejected user ${ctx.from.id}`);
     return;
@@ -229,13 +306,31 @@ bot.on("message", async (ctx) => {
   await ctx.sendChatAction("typing");
 
   try {
+    // Download any attachments first
+    let attachmentPaths = [];
+    if (hasAttachment) {
+      attachmentPaths = await downloadAttachments(ctx);
+      console.log(`[ATT] Downloaded ${attachmentPaths.length} file(s)`);
+    }
+
+    // Build the user message for the SDK
+    let userMessage = textPart;
+    if (attachmentPaths.length > 0) {
+      const list = attachmentPaths.map((p) => `- ${p}`).join("\n");
+      const header = attachmentPaths.length === 1
+        ? "The user attached 1 file via Telegram:"
+        : `The user attached ${attachmentPaths.length} files via Telegram:`;
+      userMessage = (textPart ? `${textPart}\n\n` : "") +
+        `${header}\n${list}\n\nUse the Read tool to inspect the file(s) as needed.`;
+    }
+
     // Collect tools used and intermediate text
     const toolsUsed = [];
     let toolMsgId = null;
     const intermediateTexts = [];
 
     console.log("[SDK] Sending to Claude...");
-    const response = await askSdk(ctx.message.text, async (event) => {
+    const response = await askSdk(userMessage, async (event) => {
       if (event.type === "tool") {
         console.log(`[TOOL] ${event.tool}`);
         toolsUsed.push(formatToolArg(event.tool, event.input));
