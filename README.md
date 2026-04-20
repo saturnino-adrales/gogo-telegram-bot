@@ -92,6 +92,11 @@ Priority: slash command args > project config > global config
 
 ## Changelog
 
+### 1.0.10 — No more silent death on long runs
+- Disabled Telegraf's 90s `handlerTimeout` (set to `Infinity`) so long-running SDK / Agent calls aren't aborted mid-flight
+- Added `bot.catch` to surface Telegraf middleware errors
+- `unhandledRejection` and `uncaughtException` now DM the owner a formatted error (stack trace included) in addition to logging
+
 ### 1.0.9 — Session resilience
 - Added `/reset` Telegram command to clear the current SDK session
 - Auto-rotate session on context-limit errors (one-shot retry with fresh session)

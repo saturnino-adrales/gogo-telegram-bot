@@ -108,6 +108,11 @@ GoGo IT Lab
 
 ## 更新履歴
 
+### 1.0.10 — 長時間処理中のサイレント停止を解消
+- Telegrafの90秒 `handlerTimeout` を無効化（`Infinity`）。長時間のSDK/Agent呼び出しが途中でabortされなくなった
+- Telegrafのミドルウェアエラーを `bot.catch` で捕捉
+- `unhandledRejection` と `uncaughtException` 発生時、ログ出力に加えてオーナーにTelegram DMでエラー詳細（スタックトレース含む）を通知
+
 ### 1.0.9 — セッション耐障害性
 - `/reset` コマンドを追加（現在のSDKセッションをクリア）
 - コンテキスト上限エラー発生時、自動でセッションをローテーション（新規セッションで1回リトライ）
