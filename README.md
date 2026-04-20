@@ -92,6 +92,10 @@ Priority: slash command args > project config > global config
 
 ## Changelog
 
+### 1.0.12 — Better tool labels
+- `Agent` / `Task` tool entries now show the subagent's `description` (or `subagent_type`) — parallel agents no longer look identical
+- `ToolSearch` and WebFetch-style tools show their `query` / `url`
+
 ### 1.0.11 — Stream intermediate text live
 - Intermediate thinking messages now stream to Telegram as Claude produces them, instead of being buffered and dumped after the SDK finishes
 - Final result is only sent if it wasn't already streamed as an intermediate (no duplicate)

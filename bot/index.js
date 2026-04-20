@@ -351,10 +351,21 @@ function escHtml(str) {
 // --- Format tool name for display ---
 function formatToolArg(tool, input) {
   if (!input) return escHtml(tool);
+  // Agent / Task: show the subagent's description (or subagent_type) so
+  // three parallel Agent calls don't look identical.
+  if (tool === "Agent" || tool === "Task") {
+    const label = input.description || input.subagent_type;
+    if (label) {
+      const trimmed = label.length > 60 ? label.slice(0, 60) + "..." : label;
+      return `${escHtml(tool)} (${escHtml(trimmed)})`;
+    }
+  }
   if (input.file_path) return `${escHtml(tool)} (${escHtml(input.file_path.split("/").pop())})`;
   if (input.pattern) return `${escHtml(tool)} ("${escHtml(input.pattern)}")`;
   if (input.command) return `${escHtml(tool)} (${escHtml(input.command.slice(0, 40))}${input.command.length > 40 ? "..." : ""})`;
   if (input.skill) return `${escHtml(tool)} (${escHtml(input.skill)})`;
+  if (input.query) return `${escHtml(tool)} ("${escHtml(input.query.slice(0, 40))}${input.query.length > 40 ? "..." : ""}")`;
+  if (input.url) return `${escHtml(tool)} (${escHtml(input.url.slice(0, 60))})`;
   return escHtml(tool);
 }
 
