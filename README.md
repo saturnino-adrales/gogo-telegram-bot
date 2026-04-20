@@ -56,6 +56,7 @@ defaults:
 | `/acl add <id>` | Add a user |
 | `/acl remove <id>` | Remove a user |
 | `/context` | Show injected context size |
+| `/reset` | Clear the current SDK session and start fresh |
 
 ## Features
 
@@ -66,7 +67,9 @@ defaults:
 - Real-time tool use streaming (shows which tools Claude is using)
 - Intermediate text messages ("Let me check...")
 - Telegram HTML formatting (bold, code, tables, links)
-- Auto-compaction for long sessions
+- Image and file attachment support (photos, documents, audio, video, stickers)
+- Auto-rotate session on context-limit errors (recovers without restart)
+- Manual session reset via `/reset`
 - Session persistence (remembers conversation within a session)
 - Project-level config override
 
@@ -86,3 +89,36 @@ Priority: slash command args > project config > global config
 - **Global**: `~/.claude/telegram-bot.yml`
 - **Project**: `./telegram-bot.yml` (optional, overrides global)
 - **Args**: `--full`, `--acl 123,456` (overrides everything)
+
+## Changelog
+
+### 1.0.9 — Session resilience
+- Added `/reset` Telegram command to clear the current SDK session
+- Auto-rotate session on context-limit errors (one-shot retry with fresh session)
+- `unhandledRejection` / `uncaughtException` are logged instead of killing the bot
+
+### 1.0.8 — PID state file
+- Bot writes `/tmp/gogo-telegram-bot.state.json` on startup and on `/permlevel` / `/acl` changes
+- `/telegram ps|kill|stop|restart` use `kill -0 <pid>` liveness probe (no `ps aux`)
+- State file removed on clean shutdown; stale files auto-cleaned on discovery
+
+### 1.0.7 — Attachments
+- Download and pass Telegram attachments (photo, document, video, audio, voice, video_note, animation, sticker) to Claude via absolute file paths
+- Files saved under `<cwd>/.telegram-uploads/`
+- Accepts text, caption, or attachment-only messages
+
+### 1.0.6 — Process control fix
+- `/telegram stop` uses `kill -9` with a correct pgrep regex
+
+### 1.0.5 — Detached bot process
+- Uses `nohup` so the bot survives Claude Code exiting
+
+### 1.0.4 and earlier
+- Installer copies `SKILL.md` to the skill root for Claude Code discovery
+- Japanese README
+- `npx gogo-telegram-bot` one-command installer
+- Renamed to `gogo-telegram-bot` under GoGo IT Lab
+- Restructured as a Claude Code plugin for npm distribution
+- `/telegram restart` and `/telegram stop` subcommands
+- HTML entity escaping in tool-use messages
+- Always send final result, even when it matches an intermediate text
