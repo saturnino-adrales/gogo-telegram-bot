@@ -1,6 +1,6 @@
 {
   "name": "gogo-telegram-bot",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "Claude Code plugin — spawn an ephemeral Telegram bot with full conversation context, configurable permissions, and real-time tool use streaming",
   "main": ".",
   "bin": {
