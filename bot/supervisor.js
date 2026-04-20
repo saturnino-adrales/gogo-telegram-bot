@@ -65,6 +65,7 @@ function spawnBot() {
     env: {
       ...process.env,
       GOGO_BOT_SUPERVISOR_PID: String(process.pid),
+      GOGO_BOT_RESPAWN_COUNT: String(respawnCount),
     },
   });
 

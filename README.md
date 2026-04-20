@@ -92,6 +92,11 @@ Priority: slash command args > project config > global config
 
 ## Changelog
 
+### 1.0.14 — Restore 1.0.10 fixes + silence respawn DMs
+- **Fix regression**: 1.0.11 accidentally reverted 1.0.10's `handlerTimeout: Infinity`, `bot.catch`, and owner-notification handlers. Restored. The 90s Telegraf watchdog is gone again.
+- Supervisor now passes `GOGO_BOT_RESPAWN_COUNT` env var to the child
+- `Bot online` DM is only sent on the first spawn — silent restarts no longer spam the owner
+
 ### 1.0.13 — Auto-restart supervisor
 - New `bot/supervisor.js` wraps the bot as a child process and respawns it on any unexpected exit (crash, event-loop death, OS kill, etc.) with exponential backoff (1s → 30s, resets after 60s of healthy uptime)
 - Only a clean `/stop` (from Telegram) or `/telegram stop` (here) actually ends the bot — exit code 0 tells the supervisor not to restart

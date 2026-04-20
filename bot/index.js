@@ -171,7 +171,32 @@ async function askSdk(userMessage, onEvent) {
 }
 
 // --- Telegram Bot ---
-const bot = new Telegraf(config.botToken);
+// handlerTimeout: Infinity — our handlers run long SDK / parallel Agent work
+// (often multi-minute). Telegraf's default 90s watchdog would abort mid-flight
+// and wedge the polling loop.
+const bot = new Telegraf(config.botToken, { handlerTimeout: Infinity });
+
+// --- Notify the owner of a background error via Telegram ---
+async function notifyOwnerOfError(label, err) {
+  try {
+    const raw = err?.stack || err?.message || String(err);
+    const truncated = raw.length > 3500 ? raw.slice(0, 3500) + "\n...(truncated)" : raw;
+    await bot.telegram.sendMessage(
+      config.ownerId,
+      `⚠️ <b>${label}</b>\n<pre>${escHtml(truncated)}</pre>`,
+      { parse_mode: "HTML" }
+    );
+  } catch (e) {
+    console.error(`[NOTIFY_FAIL] ${e.message}`);
+  }
+}
+
+// Telegraf middleware errors (anything Telegraf catches before reaching handlers)
+bot.catch((err, ctx) => {
+  console.error(`[BOT_CATCH]`, err);
+  const label = ctx?.updateType ? `Error processing ${ctx.updateType}` : "Bot error";
+  notifyOwnerOfError(label, err);
+});
 
 // /stop — owner only, shuts down
 bot.command("stop", async (ctx) => {
@@ -516,13 +541,16 @@ process.once("SIGTERM", () => {
 });
 
 // --- Launch ---
-// Log unhandled rejections but keep the bot alive. Transient SDK / network
-// failures on a single message must not take down the whole process.
+// Log unhandled errors, notify the owner via Telegram, and keep the bot alive.
+// A single bad message must not take down the whole process, and the owner
+// should see why something went wrong instead of silent death.
 process.on("unhandledRejection", (err) => {
   console.error("[UNHANDLED_REJECTION]", err);
+  notifyOwnerOfError("Unhandled rejection", err);
 });
 process.on("uncaughtException", (err) => {
   console.error("[UNCAUGHT_EXCEPTION]", err);
+  notifyOwnerOfError("Uncaught exception", err);
 });
 
 console.log("Telegram bot starting...");
@@ -541,15 +569,23 @@ async function main() {
     writeStateFile();
     console.log("Telegram bot is running.");
 
-    try {
-      await bot.telegram.sendMessage(
-        config.ownerId,
-        `*Bot online*\nPermissions: \`${config.permissionLevel}\`\nDirectory: \`${config.cwd}\`\nSend /stop to shut down.`,
-        { parse_mode: "Markdown" }
-      );
-      console.log("Startup message sent to owner.");
-    } catch (err) {
-      console.error("Could not send startup message to owner:", err.message);
+    // Only DM "Bot online" on the FIRST spawn. The supervisor increments
+    // GOGO_BOT_RESPAWN_COUNT on each respawn; we stay silent thereafter so
+    // auto-restarts don't spam the owner.
+    const respawnCount = Number(process.env.GOGO_BOT_RESPAWN_COUNT || "1");
+    if (respawnCount <= 1) {
+      try {
+        await bot.telegram.sendMessage(
+          config.ownerId,
+          `*Bot online*\nPermissions: \`${config.permissionLevel}\`\nDirectory: \`${config.cwd}\`\nSend /stop to shut down.`,
+          { parse_mode: "Markdown" }
+        );
+        console.log("Startup message sent to owner.");
+      } catch (err) {
+        console.error("Could not send startup message to owner:", err.message);
+      }
+    } else {
+      console.log(`Respawn #${respawnCount} — skipping startup DM.`);
     }
   } catch (err) {
     console.error("Bot launch failed:", err.message);
