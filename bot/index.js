@@ -48,8 +48,12 @@ const startTime = Date.now();
 const STATE_FILE = "/tmp/gogo-telegram-bot.state.json";
 
 function writeStateFile() {
+  const supervisorPid = process.env.GOGO_BOT_SUPERVISOR_PID
+    ? Number(process.env.GOGO_BOT_SUPERVISOR_PID)
+    : null;
   const state = {
     pid: process.pid,
+    supervisorPid,
     permissionLevel: currentPermLevel,
     cwd: config.cwd,
     ownerId: config.ownerId,

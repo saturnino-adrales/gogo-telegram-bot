@@ -92,6 +92,11 @@ Priority: slash command args > project config > global config
 
 ## Changelog
 
+### 1.0.13 — Auto-restart supervisor
+- New `bot/supervisor.js` wraps the bot as a child process and respawns it on any unexpected exit (crash, event-loop death, OS kill, etc.) with exponential backoff (1s → 30s, resets after 60s of healthy uptime)
+- Only a clean `/stop` (from Telegram) or `/telegram stop` (here) actually ends the bot — exit code 0 tells the supervisor not to restart
+- State file now tracks `supervisorPid` + `pid`; `/telegram stop` kills the supervisor with SIGTERM (6s grace) and SIGKILLs both if needed
+
 ### 1.0.12 — Better tool labels
 - `Agent` / `Task` tool entries now show the subagent's `description` (or `subagent_type`) — parallel agents no longer look identical
 - `ToolSearch` and WebFetch-style tools show their `query` / `url`

@@ -108,6 +108,11 @@ GoGo IT Lab
 
 ## 更新履歴
 
+### 1.0.13 — 自動再起動スーパーバイザー
+- 新規 `bot/supervisor.js` がボットを子プロセスとしてラップし、予期しない終了（クラッシュ、イベントループ終了、OS killなど）時に指数バックオフで自動再起動（1秒→30秒、60秒健全稼働でリセット）
+- Telegramの `/stop` または `/telegram stop` による正常終了（exit code 0）のみがボットを完全停止 — それ以外はスーパーバイザーが復活させる
+- ステートファイルに `supervisorPid` と `pid` を記録。`/telegram stop` はスーパーバイザーをSIGTERM（6秒猶予）、必要ならSIGKILLで両者を終了
+
 ### 1.0.12 — ツール表示の改善
 - `Agent` / `Task` ツールの呼び出しで `description`（または `subagent_type`）を表示 — 並列エージェントが同じ表示にならない
 - `ToolSearch` やWebFetch系ツールは `query` / `url` を表示

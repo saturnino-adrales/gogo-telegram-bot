@@ -23,22 +23,27 @@ Parse the user's arguments from the slash command input:
 
 ## Subcommands
 
-> **Note**: The bot writes a state file at `/tmp/gogo-telegram-bot.state.json`
-> when it starts and deletes it on clean exit. All `ps`/`kill`/`stop`/`restart`
-> subcommands read from this file — **no `ps aux` scanning** (which can hang on
-> some macOS setups). If the process was force-killed, the file may be stale;
-> the commands below probe with `kill -0 <PID>` and clean up stale files.
+> **Note**: The bot runs under a **supervisor** process that automatically
+> restarts the child bot if it crashes, hangs, or exits unexpectedly. Only
+> a clean `/stop` from Telegram or `/telegram stop` here truly stops it.
+>
+> The supervisor writes a state file at `/tmp/gogo-telegram-bot.state.json`
+> with `supervisorPid` (the parent) and `pid` (the child). All `ps`/`kill`/
+> `stop`/`restart` subcommands read from this file — no `ps aux` scanning.
 
 ### `/telegram ps` — Show Running Bot
 
 ```bash
 STATE=/tmp/gogo-telegram-bot.state.json
 if [ -f "$STATE" ]; then
-  PID=$(node -p "require('$STATE').pid" 2>/dev/null)
-  if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+  SUP=$(node -p "require('$STATE').supervisorPid || ''" 2>/dev/null)
+  PID=$(node -p "require('$STATE').pid || ''" 2>/dev/null)
+  # Probe whichever PID is known
+  PROBE="${SUP:-$PID}"
+  if [ -n "$PROBE" ] && kill -0 "$PROBE" 2>/dev/null; then
     cat "$STATE"
   else
-    echo "Stale state file (PID $PID not running). Cleaning up."
+    echo "Stale state file (PID $PROBE not running). Cleaning up."
     rm -f "$STATE"
     echo "No Telegram bots running."
   fi
@@ -47,7 +52,7 @@ else
 fi
 ```
 
-Display the JSON state as a readable table with: **PID**, **Permission Level**, **Working Directory**, **Started At**, **Owner ID**, **ACL**.
+Display the JSON state as a readable table with: **Supervisor PID**, **Bot PID**, **Permission Level**, **Working Directory**, **Started At**, **Owner ID**, **ACL**.
 
 ### `/telegram kill <PID>` — Kill a Bot
 
@@ -60,13 +65,28 @@ Confirm the kill succeeded. If the user just says `/telegram kill` without a PID
 
 ### `/telegram stop` — Stop the Running Bot
 
+Kills the **supervisor** (which cascades to the child). SIGTERM first; the
+supervisor's graceful shutdown then SIGTERMs the child and cleans up.
+
 ```bash
 STATE=/tmp/gogo-telegram-bot.state.json
 if [ -f "$STATE" ]; then
-  PID=$(node -p "require('$STATE').pid" 2>/dev/null)
-  if [ -n "$PID" ]; then kill -9 "$PID" 2>/dev/null; fi
+  SUP=$(node -p "require('$STATE').supervisorPid || ''" 2>/dev/null)
+  PID=$(node -p "require('$STATE').pid || ''" 2>/dev/null)
+  KILL_TARGET="${SUP:-$PID}"
+  if [ -n "$KILL_TARGET" ]; then
+    kill "$KILL_TARGET" 2>/dev/null
+    # Wait up to 6s for graceful exit, then SIGKILL
+    for i in 1 2 3 4 5 6; do
+      kill -0 "$KILL_TARGET" 2>/dev/null || break
+      sleep 1
+    done
+    kill -0 "$KILL_TARGET" 2>/dev/null && kill -9 "$KILL_TARGET" 2>/dev/null
+    # Also kill the orphaned child if supervisor was the target
+    [ -n "$SUP" ] && [ -n "$PID" ] && kill -9 "$PID" 2>/dev/null
+  fi
   rm -f "$STATE"
-  echo "Stopped bot (PID $PID)."
+  echo "Stopped bot (supervisor=$SUP, bot=$PID)."
 else
   echo "No Telegram bots running."
 fi
@@ -78,7 +98,7 @@ fi
    ```bash
    LEVEL=$(node -p "require('/tmp/gogo-telegram-bot.state.json').permissionLevel" 2>/dev/null)
    ```
-2. Run `/telegram stop` (above) to kill the current bot and remove the state file.
+2. Run `/telegram stop` (above) to kill the supervisor + child and remove the state file.
 3. Relaunch with `$LEVEL` (or config default if missing) following the normal launch steps below.
 
 If no bot is running, just launch a new one.
@@ -158,12 +178,14 @@ Determine the permission level from args:
 no flag             → read from config defaults
 ```
 
-### 5. Spawn the Bot
+### 5. Spawn the Bot (via supervisor)
 
-Build the command with resolved config values:
+Launch the **supervisor**, not the bot directly. The supervisor auto-restarts
+the child on any unexpected exit, so long-running operations can't leave the
+bot silently dead.
 
 ```bash
-nohup node ~/.claude/skills/telegram-bot/bot/index.js \
+nohup node ~/.claude/skills/telegram-bot/bot/supervisor.js \
   --bot-token "$BOT_TOKEN" \
   --owner-id "$OWNER_ID" \
   --permission-level "$PERMISSION_LEVEL" \
@@ -171,7 +193,7 @@ nohup node ~/.claude/skills/telegram-bot/bot/index.js \
   --cwd "$(pwd)" \
   --context-file "$CONTEXT_FILE" \
   > /tmp/telegram-bot.log 2>&1 &
-echo "PID: $!"
+echo "Supervisor PID: $!"
 ```
 
 Run this with the Bash tool (NOT `run_in_background`). The `nohup` + `&` detaches the process so it survives after Claude Code exits. Logs go to `/tmp/telegram-bot.log`.
