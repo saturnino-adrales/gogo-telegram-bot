@@ -167,32 +167,7 @@ async function askSdk(userMessage, onEvent) {
 }
 
 // --- Telegram Bot ---
-// handlerTimeout: Infinity — our handlers run long SDK calls (often multi-minute
-// parallel Agent work). Telegraf's default 90s watchdog would abort and fire
-// unhandledRejection, and the polling loop would get wedged.
-const bot = new Telegraf(config.botToken, { handlerTimeout: Infinity });
-
-// --- Notify the owner of a background error via Telegram ---
-async function notifyOwnerOfError(label, err) {
-  try {
-    const raw = err?.stack || err?.message || String(err);
-    const truncated = raw.length > 3500 ? raw.slice(0, 3500) + "\n...(truncated)" : raw;
-    await bot.telegram.sendMessage(
-      config.ownerId,
-      `⚠️ <b>${label}</b>\n<pre>${escHtml(truncated)}</pre>`,
-      { parse_mode: "HTML" }
-    );
-  } catch (e) {
-    console.error(`[NOTIFY_FAIL] ${e.message}`);
-  }
-}
-
-// Telegraf middleware errors (anything Telegraf catches before reaching handlers)
-bot.catch((err, ctx) => {
-  console.error(`[BOT_CATCH]`, err);
-  const label = ctx?.updateType ? `Error processing ${ctx.updateType}` : "Bot error";
-  notifyOwnerOfError(label, err);
-});
+const bot = new Telegraf(config.botToken);
 
 // /stop — owner only, shuts down
 bot.command("stop", async (ctx) => {
@@ -458,27 +433,29 @@ bot.on("message", async (ctx) => {
       } else if (event.type === "text") {
         console.log(`[TEXT] Intermediate: ${event.text.slice(0, 80)}`);
         intermediateTexts.push(event.text);
+        // Stream intermediate text LIVE so the user sees Claude's thinking
+        // unfold as it happens, instead of a batched dump after the fact.
+        if (event.text.length > 0) {
+          const html = mdToTelegramHtml(event.text);
+          try {
+            await ctx.reply(html, { parse_mode: "HTML" });
+            console.log(`[SENT] Live intermediate (${event.text.length} chars)`);
+          } catch (e) {
+            console.error(`[HTML_ERR] ${e.message}, falling back to plain text`);
+            try {
+              await ctx.reply(event.text);
+            } catch (e2) {
+              console.error(`[SEND_ERR] ${e2.message}`);
+            }
+          }
+        }
       }
     });
 
     console.log(`[SDK] Done. Result length: ${response?.length || 0}, intermediates: ${intermediateTexts.length}`);
 
-    // Send intermediate texts that are NOT the final result (e.g. "Let me check...")
-    for (const text of intermediateTexts) {
-      if (text !== response && text.length > 0) {
-        const html = mdToTelegramHtml(text);
-        try {
-          await ctx.reply(html, { parse_mode: "HTML" });
-          console.log(`[SENT] Intermediate text (${text.length} chars)`);
-        } catch (e) {
-          console.error(`[HTML_ERR] ${e.message}, falling back to plain text`);
-          await ctx.reply(text);
-        }
-      }
-    }
-
-    // Always send the final result
-    if (response) {
+    // Final result: only send if it wasn't already streamed as an intermediate
+    if (response && !intermediateTexts.includes(response)) {
       const html = mdToTelegramHtml(response);
       const chunks = chunkMessage(html);
       for (const chunk of chunks) {
@@ -524,16 +501,13 @@ process.once("SIGTERM", () => {
 });
 
 // --- Launch ---
-// Log unhandled errors, notify the owner via Telegram, and keep the bot alive.
-// A single bad message must not take down the whole process, and the owner
-// should see why something went wrong instead of silent death.
+// Log unhandled rejections but keep the bot alive. Transient SDK / network
+// failures on a single message must not take down the whole process.
 process.on("unhandledRejection", (err) => {
   console.error("[UNHANDLED_REJECTION]", err);
-  notifyOwnerOfError("Unhandled rejection", err);
 });
 process.on("uncaughtException", (err) => {
   console.error("[UNCAUGHT_EXCEPTION]", err);
-  notifyOwnerOfError("Uncaught exception", err);
 });
 
 console.log("Telegram bot starting...");

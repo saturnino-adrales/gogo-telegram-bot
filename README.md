@@ -92,6 +92,10 @@ Priority: slash command args > project config > global config
 
 ## Changelog
 
+### 1.0.11 — Stream intermediate text live
+- Intermediate thinking messages now stream to Telegram as Claude produces them, instead of being buffered and dumped after the SDK finishes
+- Final result is only sent if it wasn't already streamed as an intermediate (no duplicate)
+
 ### 1.0.10 — No more silent death on long runs
 - Disabled Telegraf's 90s `handlerTimeout` (set to `Infinity`) so long-running SDK / Agent calls aren't aborted mid-flight
 - Added `bot.catch` to surface Telegraf middleware errors
