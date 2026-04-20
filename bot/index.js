@@ -84,9 +84,20 @@ function buildSystemPrompt() {
   return prompt;
 }
 
-// --- Send a message to the SDK session and return the response ---
-// onEvent callback receives intermediate events: { type, text?, tool?, input? }
-async function askSdk(userMessage, onEvent) {
+// --- Detect context-limit errors from the SDK ---
+function isContextLimitError(err) {
+  const msg = (err?.message || String(err || "")).toLowerCase();
+  return (
+    msg.includes("prompt is too long") ||
+    msg.includes("context_length_exceeded") ||
+    msg.includes("maximum context length") ||
+    msg.includes("context length exceeded") ||
+    msg.includes("too many tokens")
+  );
+}
+
+// --- Single-attempt query loop (inner) ---
+async function runQuery(userMessage, onEvent) {
   const isFirstMessage = sessionId === null;
 
   const prompt = isFirstMessage
@@ -135,6 +146,26 @@ async function askSdk(userMessage, onEvent) {
   return result;
 }
 
+// --- Send a message to the SDK; auto-rotate session on context-limit errors ---
+async function askSdk(userMessage, onEvent) {
+  try {
+    return await runQuery(userMessage, onEvent);
+  } catch (err) {
+    if (isContextLimitError(err) && sessionId !== null) {
+      console.error(`[CTX] Context limit hit, rotating session and retrying once`);
+      sessionId = null;
+      if (onEvent) {
+        onEvent({
+          type: "text",
+          text: "_(context was full — started a fresh session and retried)_",
+        });
+      }
+      return await runQuery(userMessage, onEvent);
+    }
+    throw err;
+  }
+}
+
 // --- Telegram Bot ---
 const bot = new Telegraf(config.botToken);
 
@@ -154,6 +185,20 @@ bot.command("status", async (ctx) => {
   const secs = uptime % 60;
   await ctx.reply(
     `<b>Status</b>\nPermissions: <code>${currentPermLevel}</code>\nWorking dir: <code>${config.cwd}</code>\nUptime: ${mins}m ${secs}s\nSession: <code>${sessionId || "not started"}</code>`,
+    { parse_mode: "HTML" }
+  );
+});
+
+// /reset — any ACL'd user, starts a fresh SDK session
+bot.command("reset", async (ctx) => {
+  if (!acl.isAllowed(ctx.from.id)) return;
+  const prev = sessionId;
+  sessionId = null;
+  console.log(`[RESET] Session cleared (was ${prev || "none"})`);
+  await ctx.reply(
+    prev
+      ? `Session cleared. Next message starts fresh.\n<i>Previous session:</i> <code>${prev}</code>`
+      : "No active session. Next message will start one.",
     { parse_mode: "HTML" }
   );
 });
@@ -454,9 +499,13 @@ process.once("SIGTERM", () => {
 });
 
 // --- Launch ---
+// Log unhandled rejections but keep the bot alive. Transient SDK / network
+// failures on a single message must not take down the whole process.
 process.on("unhandledRejection", (err) => {
-  console.error("Unhandled rejection:", err);
-  process.exit(1);
+  console.error("[UNHANDLED_REJECTION]", err);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[UNCAUGHT_EXCEPTION]", err);
 });
 
 console.log("Telegram bot starting...");
